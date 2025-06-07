@@ -3,8 +3,7 @@ import torch
 
 from transformer_lens.HookedTransformerConfig import HookedTransformerConfig
 
-
-def convert_qwen2_weights(qwen, cfg: HookedTransformerConfig):
+def convert_qwen3_weights(qwen, cfg: HookedTransformerConfig):
     # Note that this method is also applied for Qwen1.5 models, since they
     # have architecture type Qwen2ForCausalLM.
 
@@ -28,30 +27,10 @@ def convert_qwen2_weights(qwen, cfg: HookedTransformerConfig):
         state_dict[f"blocks.{l}.attn._W_K"] = W_K
         state_dict[f"blocks.{l}.attn._W_V"] = W_V
 
-        b_Q = qwen.model.layers[l].self_attn.q_proj.bias
-        b_Q = einops.rearrange(
-            b_Q,
-            "(n_head d_head) -> n_head d_head",
-            n_head=cfg.n_heads,
-        )
-
-        b_K = qwen.model.layers[l].self_attn.k_proj.bias
-        b_K = einops.rearrange(
-            b_K,
-            "(n_head d_head) -> n_head d_head",
-            n_head=cfg.n_key_value_heads,
-        )
-
-        b_V = qwen.model.layers[l].self_attn.v_proj.bias
-        b_V = einops.rearrange(
-            b_V,
-            "(n_head d_head) -> n_head d_head",
-            n_head=cfg.n_key_value_heads,
-        )
-
-        state_dict[f"blocks.{l}.attn.b_Q"] = b_Q
-        state_dict[f"blocks.{l}.attn._b_K"] = b_K
-        state_dict[f"blocks.{l}.attn._b_V"] = b_V
+        # Remove bias handling since Qwen3 models don't use attention biases
+        # state_dict[f"blocks.{l}.attn.b_Q"] = None
+        # state_dict[f"blocks.{l}.attn.b_K"] = None
+        # state_dict[f"blocks.{l}.attn.b_V"] = None
 
         W_O = qwen.model.layers[l].self_attn.o_proj.weight
         W_O = einops.rearrange(W_O, "m (n h)->n h m", n=cfg.n_heads)
