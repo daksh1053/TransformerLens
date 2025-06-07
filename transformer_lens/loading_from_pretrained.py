@@ -39,6 +39,7 @@ from transformer_lens.pretrained.weight_conversions import (
     convert_phi3_weights,
     convert_phi_weights,
     convert_qwen2_weights,
+    convert_qwen3_weights,
     convert_qwen_weights,
     convert_t5_weights,
 )
@@ -1922,7 +1923,7 @@ def get_pretrained_state_dict(
         elif cfg.original_architecture == "Qwen2ForCausalLM":
             state_dict = convert_qwen2_weights(hf_model, cfg)
         elif cfg.original_architecture == "Qwen3ForCausalLM":
-            state_dict = convert_qwen2_weights(hf_model, cfg)
+            state_dict = convert_qwen3_weights(hf_model, cfg)
         elif cfg.original_architecture == "PhiForCausalLM":
             state_dict = convert_phi_weights(hf_model, cfg)
         elif cfg.original_architecture == "Phi3ForCausalLM":
