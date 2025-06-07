@@ -1,15 +1,20 @@
+from typing import Any
+
 import einops
 import torch
 
 from transformer_lens.HookedTransformerConfig import HookedTransformerConfig
 
-def convert_qwen3_weights(qwen, cfg: HookedTransformerConfig):
-    # Note that this method is also applied for Qwen1.5 models, since they
-    # have architecture type Qwen2ForCausalLM.
 
+def convert_qwen3_weights(qwen: Any, cfg: HookedTransformerConfig):
+    """Convert Qwen3 weights to TransformerLens format."""
     state_dict = {}
 
     state_dict["embed.W_E"] = qwen.model.embed_tokens.weight
+
+    using_gqa = cfg.n_key_value_heads is not None
+    gqa_uscore = "_" if using_gqa else ""
+    n_kv_heads = cfg.n_key_value_heads if using_gqa else cfg.n_heads
 
     assert cfg.d_mlp is not None  # keep mypy happy
 
@@ -20,17 +25,24 @@ def convert_qwen3_weights(qwen, cfg: HookedTransformerConfig):
         W_K = qwen.model.layers[l].self_attn.k_proj.weight
         W_V = qwen.model.layers[l].self_attn.v_proj.weight
         W_Q = einops.rearrange(W_Q, "(n h) m->n m h", n=cfg.n_heads)
-        W_K = einops.rearrange(W_K, "(n h) m->n m h", n=cfg.n_key_value_heads)
-        W_V = einops.rearrange(W_V, "(n h) m->n m h", n=cfg.n_key_value_heads)
+        W_K = einops.rearrange(W_K, "(n h) m->n m h", n=n_kv_heads)
+        W_V = einops.rearrange(W_V, "(n h) m->n m h", n=n_kv_heads)
 
         state_dict[f"blocks.{l}.attn.W_Q"] = W_Q
-        state_dict[f"blocks.{l}.attn._W_K"] = W_K
-        state_dict[f"blocks.{l}.attn._W_V"] = W_V
+        state_dict[f"blocks.{l}.attn.{gqa_uscore}W_K"] = W_K
+        state_dict[f"blocks.{l}.attn.{gqa_uscore}W_V"] = W_V
 
-        # Remove bias handling since Qwen3 models don't use attention biases
-        # state_dict[f"blocks.{l}.attn.b_Q"] = None
-        # state_dict[f"blocks.{l}.attn.b_K"] = None
-        # state_dict[f"blocks.{l}.attn.b_V"] = None
+        # Load weights into RMSNorm modules
+        state_dict[f"blocks.{l}.attn.q_norm.w"] = qwen.model.layers[l].self_attn.q_norm.weight
+        state_dict[f"blocks.{l}.attn.k_norm.w"] = qwen.model.layers[l].self_attn.k_norm.weight
+
+        state_dict[f"blocks.{l}.attn.b_Q"] = torch.zeros(cfg.n_heads, cfg.d_head, dtype=cfg.dtype)
+        state_dict[f"blocks.{l}.attn.{gqa_uscore}b_K"] = torch.zeros(
+            n_kv_heads, cfg.d_head, dtype=cfg.dtype
+        )
+        state_dict[f"blocks.{l}.attn.{gqa_uscore}b_V"] = torch.zeros(
+            n_kv_heads, cfg.d_head, dtype=cfg.dtype
+        )
 
         W_O = qwen.model.layers[l].self_attn.o_proj.weight
         W_O = einops.rearrange(W_O, "m (n h)->n h m", n=cfg.n_heads)
